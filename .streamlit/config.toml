@@ -1,0 +1,14 @@
+[theme]
+# Syracuse Orange, the subject's own color, used as the single accent.
+base = "light"
+primaryColor = "#D94F00"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#FAF6F3"
+textColor = "#1A1613"
+font = "sans serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

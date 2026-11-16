@@ -1,0 +1,131 @@
+# SU Free Food Finder -- all tunables and keyword lists live here.
+# Edit this file to change detection behavior; no code changes needed.
+
+source:
+  api_base: "https://events.syracuse.edu/api/2/events"
+  site_base: "https://events.syracuse.edu"
+  user_agent: "SU-FreeFood-EventFinder/1.0 (Syracuse University student project; cmart108@syr.edu)"
+
+fetch:
+  window_days: 14          # how far ahead to look
+  rate_limit_seconds: 1.0  # >= robots.txt Crawl-Delay of 1
+  cache_ttl_minutes: 60
+  page_size: 100
+  timeout_seconds: 30
+  max_retries: 3
+  respect_robots: true
+  fetch_event_pages: false # fallback only; the API already carries full descriptions
+
+# ---------------------------------------------------------------------------
+# FOOD DETECTION
+#
+# Matching runs against "<title>. <description text>" after `masking_phrases`
+# have been blanked out. One strong signal => High. Two distinct weak signals
+# => Medium. One weak signal => Low. A blocking phrase caps the result at Low.
+# ---------------------------------------------------------------------------
+detection:
+
+  # Any ONE of these is enough for High confidence.
+  strong_signals:
+    # "<food noun> ... provided / served / available" within one sentence
+    - '\b(?:lunch|lunches|dinner|dinners|breakfast|brunch|food|foods|refreshment|refreshments|snack|snacks|pizza|beverage|beverages|coffee|drink|drinks|meal|meals|dessert|desserts|appetizers|hors d.oeuvres)\b[^.!?]{0,40}\b(?:provided|served|available|furnished)\b'
+    # "provided / serving ... <food noun>" (reversed word order)
+    - '\b(?:provided|serving|providing|featuring|enjoy|complimentary)\b[^.!?]{0,30}\b(?:lunch|dinner|breakfast|brunch|food|refreshments?|snacks?|pizza|beverages?|meals?|desserts?)\b'
+    - '\bfree food\b'
+    - '\bfree (?:lunch|dinner|breakfast|brunch|pizza|snacks?|meals?)\b'
+    - '\brefreshments?\b'
+    - '\bpizza\b'
+    - '\bcater(?:ed|ing|er|ers)\b'
+    - '\bsnacks?\b'
+    - '\blight (?:lunch|breakfast|dinner|brunch|refreshments?|fare|bites)\b'
+    - '\bwhile supplies last\b'
+    - '\bbox(?:ed)? lunch(?:es)?\b'
+    - '\b(?:lunch|dinner|breakfast|refreshments?) (?:will be|is|are) (?:served|provided)\b'
+
+  # Actual food nouns. One alone => Low. Two distinct => Medium.
+  weak_signals:
+    - '\blunch(?:eon)?\b'
+    - '\bfood\b'
+    - '\bcoffee\b'
+    - '\btreats?\b'
+    - '\bdesserts?\b'
+    - '\bcookies\b'
+    - '\bdonuts?\b'
+    - '\bbagels?\b'
+    - '\bdinner\b'
+    - '\bbreakfast\b'
+
+  # Modifiers are NOT food. They only lift confidence when they appear
+  # alongside a real food noun. "Free" on its own means free admission --
+  # exactly the trap the site's own "Free" tag sets.
+  weak_modifiers:
+    - '\bfree\b'
+    - '\bcomplimentary\b'
+    - '\bno cost\b'
+
+  # Blanked out of the text BEFORE signal matching, so the words inside them
+  # cannot register as signals. This is what stops "free admission" from
+  # counting as a `free` hit, while leaving any real food mention elsewhere in
+  # the same description fully intact.
+  masking_phrases:
+    - 'free admission'
+    - 'free parking'
+    - 'free (?:to attend|event|admission)'
+    - 'free and open to (?:the public|all)'
+    - 'free of charge'
+    - 'free speech'
+    - 'free[- ]weights?'          # "full-body free-weights workout"
+    - 'fat[- ]free|sugar[- ]free|gluten[- ]free|smoke[- ]free|carefree|tax[- ]free'
+    - 'served as'              # "he served as Executive Vice President"
+    - 'serves? as'
+    - 'first[- ]come,? first[- ]served'
+    - 'food (?:drive|pantry|bank|insecurity|donation|donations|waste|systems?|studies|science)'
+    - 'canned food'
+    - 'food for thought'       # idiom; the real event is caught by "light lunch"
+    - 'coffee table'
+
+  # A hard veto: the event explicitly says food is NOT provided. Capped at Low.
+  blocking_phrases:
+    - 'no food'
+    - 'food (?:is |will )?not (?:be )?(?:provided|served|available)'
+    - 'bring your own'
+    - 'byo[bf]?\b'
+
+  # These event categories are excluded unless they reach High confidence.
+  # (Localist `filters.event_types` values.)
+  restricted_event_types:
+    - 'Exhibitions'
+    - 'Club and Intramural Sports'
+
+  # All-day events and anything running longer than this many days is treated
+  # as "ongoing" and also requires High confidence to appear.
+  ongoing_span_days: 7
+
+# ---------------------------------------------------------------------------
+# REGISTRATION DETECTION
+# ---------------------------------------------------------------------------
+registration:
+  signals:
+    - '\bregister\b'
+    - '\bregistration\b'
+    - '\brsvp\b'
+    - '\bsign[- ]up\b'
+    - '\bsign up\b'
+    - '\btickets? (?:are )?required\b'
+    - '\breserve your (?:spot|seat|ticket)\b'
+  # Never treat these as registration (Localist's own widgets).
+  ignore:
+    - "i'm interested"
+    - 'im interested'
+    - 'interested'
+  # Phrases meaning registration has closed -- status shown, no "Sign up!" badge.
+  closed_phrases:
+    - 'registration (?:is )?(?:now )?closed'
+    - 'registration has closed'
+    - 'sold out'
+    - 'at capacity'
+    - 'waitlist only'
+
+ui:
+  default_confidences: ['High', 'Medium']   # Low available but off by default
+  page_title: "SU Free Food Finder"
