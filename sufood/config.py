@@ -50,6 +50,7 @@ class DetectionConfig:
     blocking_phrases: list[re.Pattern]
     restricted_event_types: set[str]
     ongoing_span_days: int
+    exclude_announcements: bool = True
 
 
 @dataclass
@@ -93,6 +94,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
             blocking_phrases=_compile_all(d["blocking_phrases"], "blocking_phrases"),
             restricted_event_types=set(d["restricted_event_types"]),
             ongoing_span_days=int(d["ongoing_span_days"]),
+            exclude_announcements=bool(d.get("exclude_announcements", True)),
         ),
         registration=RegistrationConfig(
             signals=_compile_all(r["signals"], "registration.signals"),
@@ -104,7 +106,22 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
     )
 
 
-@lru_cache(maxsize=4)
-def get_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
-    """Cached loader for app use; tests call load_config() directly."""
+@lru_cache(maxsize=8)
+def _cached_config(path: str, mtime: float) -> Config:
     return load_config(path)
+
+
+def get_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
+    """Cached loader for app use; tests call load_config() directly.
+
+    The cache key includes config.yaml's modification time, so editing the
+    keyword lists and pressing Refresh actually picks the edits up. Without
+    that, the lru_cache would hand back the Config loaded at startup and the
+    file's documented "edit and hit Refresh" promise would silently not work.
+    """
+    path = Path(path)
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    return _cached_config(str(path), mtime)

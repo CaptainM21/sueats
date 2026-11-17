@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 
 import streamlit as st
 
-from sufood.config import get_config
+from sufood.config import DEFAULT_CONFIG_PATH, get_config
 from sufood.fetch import PoliteSession, fetch_events
 from sufood.models import HIGH, LOW, MEDIUM, EventRow
 from sufood.normalize import build_rows
@@ -163,8 +163,22 @@ PILL_CLASS = {HIGH: "p-high", MEDIUM: "p-med", LOW: "p-low"}
 # Data
 # ---------------------------------------------------------------------------
 
+def current_config_mtime() -> float:
+    """config.yaml's mtime, so an edit invalidates every layer of cache."""
+    try:
+        return DEFAULT_CONFIG_PATH.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 @st.cache_data(show_spinner=False)
-def load_rows(window_days: int, force: bool, _bust: int) -> tuple[list[EventRow], dict]:
+def load_rows(window_days: int, force: bool, _bust: int,
+              config_mtime: float) -> tuple[list[EventRow], dict]:
+    """`config_mtime` is unused in the body -- it is here purely so that
+    editing config.yaml changes Streamlit's cache key and the rows rebuild.
+    It must NOT be underscore-prefixed: st.cache_data excludes those from the
+    key, which is why `_bust` alone never invalidated anything and the Refresh
+    button has to call load_rows.clear()."""
     cfg = get_config()
     session = PoliteSession(cfg)
     if force:
@@ -275,7 +289,8 @@ def main() -> None:
 
     with st.spinner("Reading the Syracuse University events calendar…"):
         try:
-            rows, meta = load_rows(window_days, st.session_state.bust > 0, st.session_state.bust)
+            rows, meta = load_rows(window_days, st.session_state.bust > 0,
+                                  st.session_state.bust, current_config_mtime())
         except Exception as exc:  # noqa: BLE001 - surfaced to the user below
             st.error(f"Could not load events: {exc}")
             st.stop()

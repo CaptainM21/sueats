@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from sufood.config import load_config
-from sufood.detect import detect_food, detect_registration
+from sufood.detect import detect_food, detect_registration, is_announcement
 from sufood.models import HIGH, LOW, MEDIUM
 
 FIXTURE = Path(__file__).parent / "fixtures" / "api_events_raw.json"
@@ -262,3 +262,52 @@ def test_no_registration_signal(cfg):
                             localist_url="https://events.syracuse.edu/event/x",
                             cfg=cfg.registration)
     assert not r.required and r.url is None
+
+
+# ---------------------------------------------------------------------------
+# is_announcement: all four conditions are required together.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("types,all_day,span,location,expected", [
+    ([], True, 17, "", True),                       # the real case
+    (["Information Sessions"], True, 17, "", False),  # has a type -> a real event
+    ([], True, 17, "Bird Library", False),          # has a venue -> you can go
+    ([], False, 17, "", False),                     # timed -> a real event
+    ([], True, 3, "", False),                       # short -> not an ongoing run
+])
+def test_is_announcement_requires_all_conditions(cfg, types, all_day, span, location, expected):
+    assert is_announcement(types, all_day, span, location, cfg.detection) is expected
+
+
+def test_is_announcement_respects_the_config_toggle(cfg):
+    relaxed = load_config()
+    relaxed.detection.exclude_announcements = False
+    assert is_announcement([], True, 17, "", cfg.detection) is True
+    assert is_announcement([], True, 17, "", relaxed.detection) is False
+
+
+# ---------------------------------------------------------------------------
+# A meal with a place on the event's programme counts as a firm promise.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text", [
+    "Each session begins with dinner from 6:30 to 7 pm, followed by the course.",
+    "The evening starts with a light dinner.",
+    "Panel discussion followed by lunch.",
+    "Dinner at 6 pm, program at 7.",
+    "Refreshments from 4:30 to 5 pm.",
+])
+def test_scheduled_meals_are_high(text, cfg):
+    assert detect_food(text, cfg.detection).confidence == HIGH
+
+
+@pytest.mark.parametrize("text", [
+    "The lecture begins with a discussion of food systems.",
+    "The course begins with an overview of coffee production in Brazil.",
+    "Doors open at 7 pm; the dinner lecture explores famine relief.",
+    "The seminar concludes with questions.",
+    "Office hours from 2 to 4 pm.",
+])
+def test_scheduled_meal_patterns_do_not_overreach(text, cfg):
+    """A food word near a clock or a programme verb is not itself a meal."""
+    assert detect_food(text, cfg.detection).confidence != HIGH

@@ -20,7 +20,7 @@ streamlit run app.py          # opens http://localhost:8501
 events.syracuse.edu/api/2/events?days=14&pp=100
         |  5 requests, 1/sec, cached on disk
         v
-  488 instance rows  ->  178 unique events        (sufood/normalize.py)
+  486 instance rows  ->  176 unique events        (sufood/normalize.py)
         |  merge each event's occurrences
         v
   score every description                          (sufood/detect.py)
@@ -47,7 +47,7 @@ words inside "free admission" and leaves the pizza intact.
 
 | Tier | Meaning | Examples |
 |---|---|---|
-| **High** | One explicit phrase | `lunch provided`, `light lunch`, `pizza`, `refreshments`, `catered`, `while supplies last` |
+| **High** | One explicit phrase, or a meal on the programme | `lunch provided`, `light lunch`, `pizza`, `refreshments`, `catered`, `while supplies last`, `begins with dinner`, `dinner from 6:30 to 7 pm` |
 | **Medium** | Two distinct food nouns, or one plus a modifier | `free` + `cookies` |
 | **Low** | A single passing food noun | one mention of `dinner` |
 | *(none)* | No food noun at all | — |
@@ -58,12 +58,40 @@ Masked before matching: `free admission`, `free parking`, `free-weights`, `serve
 
 Vetoed down to Low: `no food`, `food not provided`, `bring your own`.
 
+**A meal with a place on the schedule is a promise.** An event does not have to say
+"provided" to be feeding you. *Salaam Shalom* says "Each session begins with dinner from
+6:30 to 7 pm" — a specific, scheduled, free meal that an earlier version graded Low and
+hid, because a bare `dinner` was its only hit. Three patterns cover this: `begins/starts/
+concludes with <meal>`, `followed by <meal>`, and `<meal> from|at <clock time>`.
+
+The second group of patterns in each pair is the guard. "The lecture begins with a
+discussion of food systems" and "Doors open at 7 pm; the dinner lecture explores famine"
+both put a food word next to a programme verb or a clock without promising a bite, and
+both are pinned as negative tests.
+
 **A modifier alone is never food.** "Free" with no food word anywhere means free admission —
 exactly the trap the site's Free tag sets. This is why "free parking is available" scores
 nothing.
 
 Exhibitions, club sports and multi-day all-day runs only appear at High confidence, and an
 ongoing all-day run shows once rather than once per day.
+
+### Announcements are not events
+
+An all-day run with **no event type and no venue** is an application window, a deadline or
+a nomination period — not a gathering. It is excluded outright, at any confidence.
+
+This is a structural rule rather than a keyword one, and it exists because the wording can
+be perfectly honest while the food is not for you. *2027 Orientation Leader Applications*
+says "meals provided", which `detect_food` still grades High in isolation — but the full
+sentence is "On-campus housing and meals provided **during summer training and New Student
+Orientation sessions**". That is job compensation, at a different event, next July.
+
+Matching on `pay rate` or `$18/hour` would be whack-a-mole; the structure gives it away
+instead. In the live window, 16 listings are all-day runs longer than a week, and the 5
+with neither a type nor a venue are *all* application windows. Every exhibit and display
+carries both, so none are affected. A listing with no venue also can't tell you where to
+go, which is reason enough to leave it off a "where do I eat today" board.
 
 ### Registration
 
@@ -75,7 +103,9 @@ says registration has closed, the status shows but the **Sign up!** badge does n
 
 ## Configuration
 
-Every keyword list lives in **`config.yaml`** — edit it and hit Refresh, no code changes:
+Every keyword list lives in **`config.yaml`** — edit it and hit Refresh, no code changes.
+`get_config()` keys its cache on the file's modification time and the Streamlit cache key
+carries it too, so an edit really does take effect without restarting the app:
 
 | Key | What it controls |
 |---|---|
@@ -88,6 +118,7 @@ Every keyword list lives in **`config.yaml`** — edit it and hit Refresh, no co
 | `detection.masking_phrases` | Blanked out before matching |
 | `detection.blocking_phrases` | Hard veto down to Low |
 | `detection.restricted_event_types` | Categories needing High to appear |
+| `detection.exclude_announcements` | Drop venueless, untyped all-day runs (application windows) |
 | `registration.*` | Registration signals, ignores, and closed-phrases |
 
 ## Being a good citizen
@@ -104,13 +135,15 @@ Every keyword list lives in **`config.yaml`** — edit it and hit Refresh, no co
 pytest -q
 ```
 
-56 tests, offline against a captured API snapshot in `tests/fixtures/`. They pin the
+77 tests, offline against a captured API snapshot in `tests/fixtures/`. They pin the
 acceptance criteria:
 
 - The **Food for Thought / Goodbye to Silos** event is High, detected through its
   *"light lunch"* text, with the surrounding sentence captured.
 - **Turkeys for Veterans** never reaches High.
 - **Club sports games** never reach High — they carry the site's `free` tag and no food words.
+- **2027 Orientation Leader Applications** is absent from the board even though its
+  text still grades High — the announcement rule, not the detector, removes it.
 - Free-tagged events with no food wording produce no match at all.
 
 Plus the regression cases that shaped the design: `served as`, `first-come first-served`,

@@ -41,6 +41,12 @@ detection:
     - '\bwhile supplies last\b'
     - '\bbox(?:ed)? lunch(?:es)?\b'
     - '\b(?:lunch|dinner|breakfast|refreshments?) (?:will be|is|are) (?:served|provided)\b'
+    # A meal on the event's own programme -- "begins with dinner", "followed
+    # by lunch", "dinner from 6:30 to 7 pm". A meal with a place on the
+    # schedule is as firm a promise as an explicit "provided".
+    - '\b(?:begins?|began|starts?|started|opens?|kicks? off|concludes?|ends?)\b[^.!?]{0,18}\bwith\s+(?:an?|the|some|light|free|complimentary)?\s*(?:dinner|lunch(?:eon)?|breakfast|brunch|refreshments?|snacks?|pizza|coffee|dessert|meal)\b'
+    - '\bfollowed by\s+(?:an?|the|some|light|free|complimentary)?\s*(?:dinner|lunch(?:eon)?|breakfast|brunch|refreshments?|snacks?|pizza|dessert|meal)\b'
+    - '\b(?:dinner|lunch(?:eon)?|breakfast|brunch|pizza|refreshments?|snacks?|dessert)\b[^.!?]{0,25}\b(?:from|at|beginning at|starting at)\s+\d{1,2}(?::\d{2})?\s*(?:[ap]\.?m\.?|(?:to|[-\u2013])\s*\d)'
 
   # Actual food nouns. One alone => Low. Two distinct => Medium.
   weak_signals:
@@ -100,6 +106,11 @@ detection:
   # All-day events and anything running longer than this many days is treated
   # as "ongoing" and also requires High confidence to appear.
   ongoing_span_days: 7
+
+  # An all-day run with no event type AND no venue is an announcement -- an
+  # application window, a deadline, a nomination period -- not a gathering.
+  # Nothing is served at it, so it never qualifies however its text reads.
+  exclude_announcements: true
 
 # ---------------------------------------------------------------------------
 # REGISTRATION DETECTION

@@ -151,6 +151,26 @@ def is_restricted(event_types: list[str], all_day: bool, span_days: int,
     return all_day and span_days > cfg.ongoing_span_days
 
 
+def is_announcement(event_types: list[str], all_day: bool, span_days: int,
+                    location: str, cfg: DetectionConfig) -> bool:
+    """Whether this listing is an announcement rather than a gathering.
+
+    An application window, a nomination period, a registration deadline: the
+    calendar carries these as all-day runs with no event type and no venue.
+    Nothing is served at them -- any food they mention belongs to some other
+    occasion, such as a job's meal perk or a future orientation session -- so
+    unlike `is_restricted` items they do not qualify at High confidence either.
+
+    Where `is_restricted` asks "does this need High?", this asks "does this
+    belong at all?". Different questions, so they stay separate functions.
+    """
+    if not cfg.exclude_announcements:
+        return False
+    if not (all_day and span_days > cfg.ongoing_span_days):
+        return False
+    return not event_types and not (location or "").strip()
+
+
 def detect_registration(text: str, html: str, ticket_url: str, event_url: str,
                         localist_url: str, cfg: RegistrationConfig) -> Registration:
     """Decide whether an event needs signing up for, and where to do it.

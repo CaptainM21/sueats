@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 from dateutil import parser as date_parser
 
 from sufood.config import load_config
+from sufood.detect import clean_text, detect_food
 from sufood.models import HIGH
 from sufood.normalize import build_rows, dedupe_events
 
@@ -32,6 +33,33 @@ def raw_events():
 @pytest.fixture(scope="module")
 def rows(raw_events, cfg):
     return build_rows(raw_events, cfg, now=CAPTURED_AT)
+
+
+def make_event(event_id=90001, title="Synthetic Event", description="Lunch will be provided.",
+               start="2026-11-17T00:00:00-05:00", span_days=10, all_day=True,
+               location="Hendricks Chapel", event_types=("Social Activities",)):
+    """A minimal Localist-shaped event, for rules the live fixture can't exercise."""
+    first = date_parser.parse(start).date()
+    last = first + timedelta(days=span_days)
+    instances = [{
+        "event_instance": {
+            "id": event_id * 10 + n,
+            "start": (date_parser.parse(start) + timedelta(days=n)).isoformat(),
+            "all_day": all_day,
+        }
+    } for n in range(span_days + 1)]
+    return {
+        "id": event_id,
+        "title": title,
+        "description": f"<p>{description}</p>",
+        "first_date": first.isoformat(),
+        "last_date": last.isoformat(),
+        "location_name": location,
+        "filters": {"event_types": [{"name": n} for n in event_types]},
+        "departments": [{"name": "Test Department"}],
+        "localist_url": f"https://events.syracuse.edu/event/{event_id}",
+        "event_instances": instances,
+    }
 
 
 def test_dedupe_collapses_instance_level_rows(raw_events):
@@ -91,11 +119,19 @@ def test_exhibitions_require_high_confidence(rows):
             assert row.food.confidence == HIGH, f"{row.title} is a low-confidence exhibition"
 
 
-def test_ongoing_all_day_runs_require_high_confidence(rows):
-    """Multi-day all-day runs are 'ongoing' and need a specific food mention."""
-    for row in rows:
-        if row.all_day and row.span_days > 7:
-            assert row.food.confidence == HIGH
+def test_ongoing_all_day_runs_require_high_confidence(cfg):
+    """Multi-day all-day runs are 'ongoing' and need a specific food mention.
+
+    Built from a synthetic event rather than the fixture: once announcement
+    listings are excluded, the live window contains no all-day food rows at
+    all, so a loop over `rows` would pass while testing nothing.
+    """
+    weak = make_event(event_id=90010, description="Lunch options are nearby.")
+    assert build_rows([weak], cfg, now=CAPTURED_AT) == []
+
+    strong = make_event(event_id=90011, description="Lunch will be provided.")
+    strong_rows = build_rows([strong], cfg, now=CAPTURED_AT)
+    assert strong_rows and strong_rows[0].food.confidence == HIGH
 
 
 def test_recurring_timed_events_are_not_treated_as_ongoing(rows):
@@ -135,10 +171,63 @@ def test_descriptions_are_free_of_mojibake(rows):
         assert "&amp;" not in row.description_text
 
 
-def test_ongoing_all_day_runs_appear_once(rows):
+def test_ongoing_all_day_runs_appear_once(cfg):
     """A week-long all-day item is one ongoing thing, not one row per day."""
-    counts = {}
+    event = make_event(event_id=90012, span_days=10)
+    assert len(event["event_instances"]) == 11
+    rows = build_rows([event], cfg, now=CAPTURED_AT)
+    assert len(rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# Announcement listings: application windows, deadlines, nomination periods.
+# ---------------------------------------------------------------------------
+
+ANNOUNCEMENT_TITLE = "2027 Orientation Leader Applications"
+
+
+def test_application_windows_never_appear(rows, raw_events, cfg):
+    """The row is gone because of what it *is*, not what it says.
+
+    Its text genuinely promises food -- "meals provided during summer training"
+    -- and detect_food still grades that High in isolation. It is excluded
+    because an all-day run with no event type and no venue is an announcement,
+    not a gathering anyone can eat at.
+    """
+    source = next(e for e in raw_events if e["title"] == ANNOUNCEMENT_TITLE)
+    text = f"{source['title']}. {clean_text(source['description'])}"
+    assert detect_food(text, cfg.detection).confidence == HIGH
+
+    assert not [r for r in rows if r.title == ANNOUNCEMENT_TITLE]
+
+
+def test_no_venueless_all_day_announcement_survives(rows):
     for row in rows:
         if row.all_day and row.span_days > 7:
-            counts[row.event_id] = counts.get(row.event_id, 0) + 1
-    assert all(n == 1 for n in counts.values()), counts
+            assert row.event_types and row.location != "Location TBA", row.title
+
+
+def test_announcement_rule_is_configurable(raw_events):
+    """The config toggle is real, not decorative."""
+    relaxed = load_config()
+    relaxed.detection.exclude_announcements = False
+    titles = {r.title for r in build_rows(raw_events, relaxed, now=CAPTURED_AT)}
+    assert ANNOUNCEMENT_TITLE in titles
+
+
+def test_multi_day_event_with_a_venue_still_qualifies(cfg):
+    """The anti-goal: a real multi-day event must not be caught by the rule."""
+    event = make_event(event_id=90020, title="Weeklong Food Festival",
+                       location="Quad", event_types=("Social Activities",))
+    rows = build_rows([event], cfg, now=CAPTURED_AT)
+    assert len(rows) == 1
+    assert rows[0].food.confidence == HIGH
+
+
+def test_salaam_shalom_is_high_on_its_scheduled_dinner(rows):
+    """"Each session begins with dinner from 6:30 to 7 pm" is a real meal."""
+    matches = [r for r in rows if "salaam shalom" in r.title.lower()]
+    assert matches, "the Salaam Shalom sessions must reach the dashboard"
+    row = matches[0]
+    assert row.food.confidence == HIGH
+    assert "dinner" in row.food.best_match.sentence.lower()

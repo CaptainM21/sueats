@@ -16,7 +16,8 @@ from typing import Iterable
 from dateutil import parser as date_parser
 
 from .config import Config
-from .detect import clean_text, detect_food, detect_registration, is_restricted
+from .detect import (clean_text, detect_food, detect_registration, is_announcement,
+                     is_restricted)
 from .models import HIGH, EventRow
 
 
@@ -118,6 +119,12 @@ def build_rows(raw_events: Iterable[dict], cfg: Config,
                 continue
 
             all_day = bool(instance.get("all_day"))
+
+            # An application window or deadline is an announcement, not a
+            # gathering -- no High food mention redeems it.
+            if is_announcement(types, all_day, span,
+                               event.get("location_name") or "", cfg.detection):
+                continue
 
             # Exhibitions, all-day items and long-running series only earn a
             # place when the food mention is specific enough to be High.
