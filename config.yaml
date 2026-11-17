@@ -44,9 +44,15 @@ detection:
     # A meal on the event's own programme -- "begins with dinner", "followed
     # by lunch", "dinner from 6:30 to 7 pm". A meal with a place on the
     # schedule is as firm a promise as an explicit "provided".
-    - '\b(?:begins?|began|starts?|started|opens?|kicks? off|concludes?|ends?)\b[^.!?]{0,18}\bwith\s+(?:an?|the|some|light|free|complimentary)?\s*(?:dinner|lunch(?:eon)?|breakfast|brunch|refreshments?|snacks?|pizza|coffee|dessert|meal)\b'
-    - '\bfollowed by\s+(?:an?|the|some|light|free|complimentary)?\s*(?:dinner|lunch(?:eon)?|breakfast|brunch|refreshments?|snacks?|pizza|dessert|meal)\b'
-    - '\b(?:dinner|lunch(?:eon)?|breakfast|brunch|pizza|refreshments?|snacks?|dessert)\b[^.!?]{0,25}\b(?:from|at|beginning at|starting at)\s+\d{1,2}(?::\d{2})?\s*(?:[ap]\.?m\.?|(?:to|[-\u2013])\s*\d)'
+    # `meal` is deliberately absent from these two: "meal plan", "meal swipe"
+    # and "a meal of your choosing" are campus wording for food you buy
+    # yourself. A served meal still reaches High via "meals provided" above.
+    - '\b(?:begins?|began|starts?|started|opens?|kicks? off|concludes?|ends?)\b[^.!?]{0,18}\bwith\s+(?:an?|the|some|light|free|complimentary)?\s*(?:dinner|lunch(?:eon)?|breakfast|brunch|refreshments?|snacks?|pizza|coffee|dessert)\b'
+    - '\bfollowed by\s+(?:an?|the|some|light|free|complimentary)?\s*(?:dinner|lunch(?:eon)?|breakfast|brunch|refreshments?|snacks?|pizza|dessert)\b'
+    # The clock is anchored to the meal noun (bar a copula). A loose gap here
+    # used to hop over whole clauses, so "Lunch is on your own from 12 to 1"
+    # and "The Dinner Series panel at 4 p.m." both scored High.
+    - '\b(?:dinner|lunch(?:eon)?|breakfast|brunch|pizza|refreshments?|snacks?|dessert)\b\s*(?:,\s*)?(?:is|are|will be|begins|starts)?\s*\b(?:from|at|beginning at|starting at)\s+\d{1,2}(?::\d{2})?\s*(?:[ap]\.?m\.?|(?:to|[-\u2013])\s*\d)'
 
   # Actual food nouns. One alone => Low. Two distinct => Medium.
   weak_signals:
@@ -89,13 +95,22 @@ detection:
     - 'canned food'
     - 'food for thought'       # idiom; the real event is caught by "light lunch"
     - 'coffee table'
+    - 'meal[- ](?:plan|kit|prep|swipe|time)s?'   # "meal plan workshop"
+    - 'dinner[- ]table'
 
   # A hard veto: the event explicitly says food is NOT provided. Capped at Low.
   blocking_phrases:
     - 'no food'
-    - 'food (?:is |will )?not (?:be )?(?:provided|served|available)'
     - 'bring your own'
     - 'byo[bf]?\b'
+    # The meal is named, but you are the one buying it. Scoped to a food noun
+    # so an event that merely sells tickets is not vetoed.
+    - '\b(?:lunch(?:es|eon)?|dinner|breakfast|brunch|food|meals?|refreshments?|snacks?|desserts?)\b[^.!?]{0,30}\bon your own\b'
+    # Any food noun negated, not just the literal word "food" -- this also
+    # catches the parenthetical form, "lunch from 12 to 1 pm (not provided)".
+    - '\b(?:lunch(?:es|eon)?|dinner|breakfast|brunch|food|meals?|refreshments?|snacks?|desserts?|pizza)\b[^.!?]{0,30}\bnot (?:be )?(?:provided|served|available|included)\b'
+    - '\b(?:lunch(?:es|eon)?|dinner|breakfast|brunch|food|meals?|refreshments?|snacks?|desserts?)\b[^.!?]{0,30}\b(?:may be |can be |available for |for )?purchases?d?\b'
+    - '\bat your own expense\b'
 
   # These event categories are excluded unless they reach High confidence.
   # (Localist `filters.event_types` values.)

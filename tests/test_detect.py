@@ -311,3 +311,48 @@ def test_scheduled_meals_are_high(text, cfg):
 def test_scheduled_meal_patterns_do_not_overreach(text, cfg):
     """A food word near a clock or a programme verb is not itself a meal."""
     assert detect_food(text, cfg.detection).confidence != HIGH
+
+
+# ---------------------------------------------------------------------------
+# A named meal is not a promise of food when the text says you are paying for
+# it, when the clock belongs to the event rather than to the meal, or when the
+# food word is really part of a compound noun.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text", [
+    # The meal is on the agenda, but at your own cost -- standard symposium
+    # wording that means exactly the opposite of "food provided".
+    "Lunch is on your own from 12 to 1 p.m.",
+    "Lunch break from 12 to 1 pm (not provided).",
+    "Breakfast is not included; dinner at 7 p.m. is at your own expense.",
+    "Lunch may be purchased at 12 p.m.",
+    # The clock belongs to the event; the meal word is its subject.
+    "A discussion of breakfast cereal advertising at 3 p.m.",
+    "The Dinner Series panel at 4 p.m. will discuss hunger.",
+])
+def test_meal_near_a_clock_is_not_always_a_served_meal(text, cfg):
+    assert detect_food(text, cfg.detection).confidence != HIGH, text
+
+
+@pytest.mark.parametrize("text", [
+    "The talk begins with a meal plan workshop.",
+    "The semester ends with a meal plan survey.",
+    "Meal swipes are available at every dining center.",
+    "Followed by a meal of your choosing at local restaurants.",
+    "The series concludes with a dinner-table conversation about grief.",
+])
+def test_meal_compounds_are_not_a_served_meal(text, cfg):
+    """'meal plan', 'meal swipe', 'dinner-table' are not food on offer."""
+    assert detect_food(text, cfg.detection).confidence != HIGH, text
+
+
+@pytest.mark.parametrize("text", [
+    "Lunch is on your own.",
+    "Dinner is at your own expense.",
+    "Breakfast is not included in the registration fee.",
+    "Snacks available for purchase in the lobby.",
+])
+def test_pay_your_own_way_phrases_block(text, cfg):
+    v = detect_food(text, cfg.detection)
+    assert v.blocked_by, text
+    assert v.confidence == LOW, text

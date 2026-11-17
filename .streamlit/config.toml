@@ -1,11 +1,35 @@
+# Syracuse Orange is the subject's own color, and it is spent on exactly one
+# thing: something happening right now. Everything else is warm neutral, so the
+# accent always means "go", never "decoration".
+#
+# `base` is deliberately absent -- without it Streamlit follows the viewer's
+# browser preference and picks [theme.light] or [theme.dark] below, so the
+# chrome and our own stylesheet always agree.
+
 [theme]
-# Syracuse Orange, the subject's own color, used as the single accent.
-base = "light"
+font = "Public Sans, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif"
+headingFont = "Bricolage Grotesque, Public Sans, system-ui, sans-serif"
+codeFont = "IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, monospace"
+baseFontSize = 15
+baseRadius = "medium"
+buttonRadius = "medium"
+showWidgetBorder = true
+
+[theme.light]
 primaryColor = "#D94F00"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#FAF6F3"
-textColor = "#1A1613"
-font = "sans serif"
+backgroundColor = "#FBFAF9"
+secondaryBackgroundColor = "#F6F3F0"
+textColor = "#17120F"
+borderColor = "#E8E3DE"
+linkColor = "#A83C00"
+
+[theme.dark]
+primaryColor = "#FF7A33"
+backgroundColor = "#15120F"
+secondaryBackgroundColor = "#1E1A16"
+textColor = "#F5F1ED"
+borderColor = "#2E2823"
+linkColor = "#FF9459"
 
 [server]
 headless = true
